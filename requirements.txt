@@ -1,0 +1,10 @@
+meilisearch
+sqlalchemy
+psycopg2-binary
+python-dotenv
+openai
+pandas
+matplotlib
+fastapi 
+uvicorn
+matplotlib
