@@ -2,30 +2,32 @@ import os
 from dotenv import load_dotenv
 import meilisearch
 import json
-import requests
+import logging
 
-# Load environment variables
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 load_dotenv()
 
 MEILI_HOST = os.getenv("MEILI_HOST")
 MEILI_MASTER_KEY = os.getenv("MEILI_MASTER_KEY")
 
 if not all([MEILI_HOST, MEILI_MASTER_KEY]):
-    raise ValueError("Missing one or more environment variables: MEILI_HOST, MEILI_MASTER_KEY")
+    logger.error("Missing one or more environment variables: MEILI_HOST, MEILI_MASTER_KEY")
+    exit(1)
 
-# Initialize Meilisearch client
 try:
     meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
     version = meili_client.get_version()
-    print(f"Meilisearch client initialized successfully. Server version: {version['pkgVersion']}")
+    logger.info(f"Meilisearch client initialized successfully. Server version: {version['pkgVersion']}")
 except Exception as e:
-    print(f"Failed to initialize Meilisearch client: {e}")
+    logger.error(f"Failed to initialize Meilisearch client: {e}")
     exit(1)
 
 
 def meilisearch_query(index_name: str, query: str = None, filters: str = None, limit: int = 10, offset: int = 0) -> str:
     """
-    Performs a search query against a specified Meilisearch index.
+    Performs a search query against a specified Meilisearch index using the Meilisearch Python SDK.
     
     Args:
         index_name (str): The UID of the Meilisearch index to search (e.g., "products" or "users").
@@ -38,63 +40,43 @@ def meilisearch_query(index_name: str, query: str = None, filters: str = None, l
         str: JSON string representing the search results or error message.
     """
     if index_name not in ["products", "users"]:
-        return json.dumps({"error": f"Invalid index_name. Must be 'products' or 'users'. Got: {index_name}"})
+        error_msg = f"Invalid index_name. Must be 'products' or 'users'. Got: {index_name}"
+        logger.warning(error_msg)
+        return json.dumps({"error": error_msg})
 
     try:
-        search_url = f"{MEILI_HOST}/indexes/{index_name}/search"
-        headers = {
-            "Authorization": f"Bearer {MEILI_MASTER_KEY}",
-            "Content-Type": "application/json"
-        }
+        index = meili_client.index(index_name)
         
-        search_params = {
+        # All search options (except the main query string) go into this dictionary
+        search_options = {
             "limit": limit,
             "offset": offset
         }
-        
-        if query:
-            search_params["q"] = query
         if filters:
-            # For Meilisearch 1.15.2, we need to handle email filtering differently
-            if "email" in filters and ("ENDS WITH" in filters or "CONTAINS" in filters):
-                return json.dumps({
-                    "error": "Filter limitation",
-                    "message": "Email domain filtering requires Meilisearch v1.3+ with experimental features enabled",
-                    "suggestion": "Upgrade Meilisearch or use exact email matching"
-                })
-            search_params["filter"] = filters
+            search_options["filter"] = filters
 
-        response = requests.post(search_url, headers=headers, json=search_params)
-        response.raise_for_status()
-        results = response.json()
+        logger.info(f"Performing Meilisearch query on index '{index_name}' with query='{query}', options={search_options}")
         
+        # Pass the query string as the first positional argument,
+        # and search_options as the second (unpacked) argument.
+        results = index.search(query, search_options) 
+
         return json.dumps({
             "hits": results.get("hits", []),
             "estimatedTotalHits": results.get("estimatedTotalHits", 0)
         }, indent=2)
 
-    except requests.exceptions.RequestException as e:
-        if e.response is not None:
-            try:
-                error_details = e.response.json()
-                return json.dumps({
-                    "error": "Meilisearch API error",
-                    "code": error_details.get("code"),
-                    "message": error_details.get("message"),
-                    "type": error_details.get("type"),
-                    "link": error_details.get("link")
-                })
-            except ValueError:
-                return json.dumps({
-                    "error": "HTTP error",
-                    "status_code": e.response.status_code,
-                    "message": str(e)
-                })
+    except meilisearch.errors.MeilisearchApiError as e:
+        logger.error(f"Meilisearch API error during query: {e}")
         return json.dumps({
-            "error": "HTTP request failed",
-            "message": str(e)
+            "error": "Meilisearch API error",
+            "code": e.code,
+            "message": e.message,
+            "type": e.type,
+            "link": e.link
         })
     except Exception as e:
+        logger.error(f"Unexpected error during Meilisearch query: {e}", exc_info=True)
         return json.dumps({
             "error": "Unexpected error",
             "message": str(e),
@@ -108,8 +90,9 @@ if __name__ == "__main__":
     print("--- Testing meilisearch_query ---")
     
     try:
-        indexes = meili_client.get_raw_indexes()
-        print("Available indexes:", [index['uid'] for index in indexes['results']])
+        # Corrected method to get indexes and access results
+        indexes_response = meili_client.get_indexes() 
+        print("Available indexes:", [index.uid for index in indexes_response.results])
     except Exception as e:
         print("Failed to get indexes:", str(e))
 
@@ -118,7 +101,8 @@ if __name__ == "__main__":
         {"name": "Filter products", "params": {"index_name": "products", "filters": "category = 'Electronics' AND price < 500"}},
         {"name": "User search with typo", "params": {"index_name": "users", "query": "benaluru"}},
         {"name": "Invalid index", "params": {"index_name": "invalid_index", "query": "test"}},
-        {"name": "Combined query", "params": {"index_name": "products", "query": "T-Shirt", "filters": "category = 'Apparel'"}}
+        {"name": "Combined query", "params": {"index_name": "products", "query": "T-Shirt", "filters": "category = 'Apparel'"}},
+        {"name": "Users from Bengaluru", "params": {"index_name": "users", "filters": "location = 'Bengaluru'"}}
     ]
 
     for test in tests:

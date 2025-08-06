@@ -120,13 +120,7 @@ tools = [
 ]
 
 # --- Agent Logic ---
-def run_agent_query(user_query: str) -> dict: # Changed return type to dict
-    """
-    Processes a natural language query using an LLM to decide
-    whether to use Meilisearch or SQL, then executes the chosen tool,
-    and synthesizes the final answer. Handles multi-step reasoning and retries.
-    Returns a dictionary with 'response' and 'tools_used'.
-    """
+def run_agent_query(user_query: str) -> dict:
     messages = [
         {
             "role": "system",
@@ -169,7 +163,7 @@ def run_agent_query(user_query: str) -> dict: # Changed return type to dict
     current_step = 0
     
     last_sql_query_data = None
-    tools_executed_in_chain = set() # Use a set to store unique tool names
+    tools_executed_in_chain = set()
 
     while current_step < max_total_steps:
         current_step += 1
@@ -178,7 +172,6 @@ def run_agent_query(user_query: str) -> dict: # Changed return type to dict
         llm_response_message = get_llm_tool_response(messages=messages, tools=tools)
         
         if isinstance(llm_response_message, dict) and llm_response_message.get("role") == "assistant":
-            # If LLM directly responds, it means no tools were used or it gave up
             return {
                 "response": llm_response_message.get("content", "An unexpected error occurred with the AI response."),
                 "tools_used": "None" if not tools_executed_in_chain else ", ".join(sorted(list(tools_executed_in_chain)))
@@ -201,23 +194,43 @@ def run_agent_query(user_query: str) -> dict: # Changed return type to dict
                 function_to_call = available_functions.get(function_name)
                 
                 if function_to_call:
-                    tools_executed_in_chain.add(function_name) # Track the tool used
+                    tools_executed_in_chain.add(function_name)
                     try:
                         function_args = json.loads(tool_call.function.arguments)
                         print(f"\nAgent decided to call: {function_name} with args: {function_args}")
+
+                        tool_output_raw = function_to_call(**function_args)
+                        
+                        # --- FIX: Parse JSON string output from tools like meilisearch_query ---
+                        if isinstance(tool_output_raw, str):
+                            try:
+                                tool_output_parsed = json.loads(tool_output_raw)
+                            except json.JSONDecodeError:
+                                # If it's a string but not valid JSON, treat as an error message
+                                tool_output_parsed = {"success": False, "message": f"Tool returned invalid JSON string: {tool_output_raw}"}
+                        else:
+                            tool_output_parsed = tool_output_raw
+                        # --- END FIX ---
 
                         # --- FIX: Intercept `generate_chart` call to ensure 'data' is present ---
                         if function_name == 'generate_chart' and 'data' not in function_args:
                             if last_sql_query_data is not None:
                                 print("Fixing missing 'data' argument for generate_chart by injecting from previous SQL output.")
                                 function_args['data'] = last_sql_query_data
+                                # Re-call the function with corrected arguments
+                                tool_output_raw = function_to_call(**function_args)
+                                # Re-parse the (potentially new) raw output
+                                if isinstance(tool_output_raw, str):
+                                    try:
+                                        tool_output_parsed = json.loads(tool_output_raw)
+                                    except json.JSONDecodeError:
+                                        tool_output_parsed = {"success": False, "message": f"Tool returned invalid JSON string after data injection: {tool_output_raw}"}
+                                else:
+                                    tool_output_parsed = tool_output_raw
                             else:
-                                # If data is still missing, it's a critical error for chart generation
                                 raise ValueError("Missing 'data' argument for generate_chart and no previous SQL query data available.")
                         # --- END FIX ---
 
-                        tool_output_raw = function_to_call(**function_args)
-                        tool_output_parsed = tool_output_raw
 
                         print(f"Tool output: {json.dumps(tool_output_parsed, indent=2, cls=DateTimeEncoder)}")
 
@@ -258,7 +271,7 @@ def run_agent_query(user_query: str) -> dict: # Changed return type to dict
                                 "content": json.dumps({"error": error_msg}, cls=DateTimeEncoder),
                             }
                         )
-                    except ValueError as e: # Catch the specific ValueError for missing chart data
+                    except ValueError as e:
                         error_msg = f"Chart generation error: {e}"
                         logger.error(error_msg)
                         tool_outputs.append(
@@ -294,13 +307,12 @@ def run_agent_query(user_query: str) -> dict: # Changed return type to dict
             
             messages.extend(tool_outputs)
 
-        else: # LLM decided to respond directly with text (the final answer)
+        else:
             return {
                 "response": llm_response_message.content,
                 "tools_used": "None" if not tools_executed_in_chain else ", ".join(sorted(list(tools_executed_in_chain)))
             }
 
-    # If max_total_steps is reached without a direct text response from LLM
     return {
         "response": "The agent could not fully resolve the query after multiple steps. Please try rephrasing your query.",
         "tools_used": "None" if not tools_executed_in_chain else ", ".join(sorted(list(tools_executed_in_chain)))
@@ -316,7 +328,7 @@ if __name__ == "__main__":
             print("Exiting agent. Goodbye!")
             break
 
-        agent_result = run_agent_query(user_input) # Changed to agent_result
+        agent_result = run_agent_query(user_input)
         print(f"\nAgent Response: {agent_result['response']}")
         print(f"Tools Used: {agent_result['tools_used']}")
 

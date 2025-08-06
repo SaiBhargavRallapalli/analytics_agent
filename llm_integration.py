@@ -13,7 +13,7 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def get_llm_response(prompt: str, model: str = "gpt-3.5-turbo", temperature: float = 0.7) -> str:
+def get_llm_response(prompt: str, model: str = "gpt-4.1", temperature: float = 0.7) -> str:
     """
     Sends a prompt to the OpenAI LLM and returns the response.
     Best for general conversational responses.

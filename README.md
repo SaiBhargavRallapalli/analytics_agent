@@ -60,10 +60,10 @@ curl --location 'http://127.0.0.1:8007/query' \
     "tools_used": "execute_sql_query, meilisearch_query or generate_chart",
 }
 ```
-
 sql_tools.py, meilisearch_tools.py, chart_tools.py -> are the tools
 
-## Generate the meilisearch host and key
+
+## Generate the meilisearch host and key (Not Needed for Now - We are using local setup to build)
 1. goto -> https://cloud.meilisearch.com/ -> register (if no account exists) or login
 2. Create a project
 3. At the bottom of projects page, you will see a list of projects.
@@ -71,7 +71,7 @@ sql_tools.py, meilisearch_tools.py, chart_tools.py -> are the tools
 5. Copy API_KEY and HOST and add the same into .env file.
 ![alt text](image.png)
 
-## postgres db setup
+## postgres db setup (local)
 1. Run the Docker as given the Step-2 above
 2. then run db setup and then populate db 
 3. postgres db is ready to use with the sample data.
