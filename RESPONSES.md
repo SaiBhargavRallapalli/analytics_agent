@@ -10,7 +10,7 @@ curl --location 'http://127.0.0.1:8007/query' \
     "tools_used": "execute_sql_query, generate_chart"
 }
 ```
-chart_20250806_233904.png
+![alt text](./charts/charts/chart_20250806_233904.png)
 
 
 ```bash
