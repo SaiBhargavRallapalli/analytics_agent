@@ -9,8 +9,8 @@ curl --location 'http://127.0.0.1:8007/query' \
     "response": "Here is a bar chart showing the total sales amount per product category for the last 6 months. You can view the chart [here](sandbox:/charts/chart_20250806_233904.png).",
     "tools_used": "execute_sql_query, generate_chart"
 }
+Charts will be stored in charts folder.
 ```
-![alt text](./charts/charts/chart_20250806_233904.png)
 
 
 ```bash
