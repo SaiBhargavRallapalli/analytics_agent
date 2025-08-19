@@ -81,3 +81,5 @@ sql_tools.py, meilisearch_tools.py, chart_tools.py -> are the tools
 
 ## Generate Chart using matplotlib
 ![alt text](./charts/chart_20250805_232053.png)
+
+# In partnership with [Superteams.ai](https://www.superteams.ai)
